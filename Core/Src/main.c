@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -51,10 +50,13 @@ DMA_HandleTypeDef hdma_adc1;
 
 TIM_HandleTypeDef htim2;
 
+UART_HandleTypeDef huart5;
+
 /* USER CODE BEGIN PV */
-char buffer_cokomel[3];
+char buffer_cokomel[3]="ABC";
 uint16_t adc_buffer_1[4096],adc_buffer_2[4096];
-uint16_t adc_buffer[8192];
+uint16_t adc_buffer[4096];
+uint32_t adc_buffer_ex[4096];
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){
 
 }
@@ -65,10 +67,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc){
 	//uint16_t ts_cal1=*TEMPSENSOR_CAL1_ADDR;
 	//uint16_t ts_cal2=*TEMPSENSOR_CAL2_ADDR;
 	//float temperature = ((float)(110-30)/(ts_cal2-ts_cal1)) * (adc_buffer[0] - ts_cal1)  + 30;
-
+	HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
+	//HAL_UART_Transmit(&huart4, buffer_cokomel,3,100);
+	//HAL_ADC_Stop_DMA(&hadc2);
+	//CDC_Transmit_FS(adc_buffer,sizeof(adc_buffer));
 	//sprintf(buffer_cokomel, "%d", temperature);
 	// do stuff with result
-
 	//HAL_UART_Transmit(&huart4, buffer_cokomel,3,100);
 
 //
@@ -83,6 +87,7 @@ static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC2_Init(void);
+static void MX_UART5_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -124,19 +129,34 @@ int main(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
-  MX_USB_DEVICE_Init();
   MX_ADC2_Init();
+  MX_UART5_Init();
   /* USER CODE BEGIN 2 */
-  //HAL_ADC_Start_DMA(&hadc1,(uint32_t *)adc_buffer,sizeof(adc_buffer));
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
+  //HAL_ADC_Start_DMA(&hadc1,(uint32_t *)adc_buffer,sizeof(adc_buffer));
+  HAL_ADC_Start(&hadc2);
+  HAL_ADCEx_MultiModeStart_DMA(&hadc1, adc_buffer_ex, sizeof(adc_buffer_ex));
+
+
+   while (1)
   {
+	  HAL_UART_Receive(&huart5, &rxdata,1,1);
 	  if(rxdata=='a'){
-		  completed=0;
+		  HAL_ADC_Stop(&hadc2);
+		  HAL_ADCEx_MultiModeStop_DMA(&hadc1);
+			  if(HAL_UART_Transmit(&huart5, adc_buffer_ex,sizeof(adc_buffer_ex),2000)!=HAL_OK)
+			  HAL_UART_Transmit(&huart5, buffer_cokomel,3,100);
+		  rxdata='\0';
 		  HAL_ADC_Start(&hadc2);
+		  HAL_ADCEx_MultiModeStart_DMA(&hadc1, adc_buffer_ex, sizeof(adc_buffer_ex));
+
+		//  HAL_ADC_Start_DMA(&hadc1,(uint32_t *)adc_buffer,sizeof(adc_buffer));
+		  completed=0;
+		/*  HAL_ADC_Start(&hadc2);
 		  HAL_ADCEx_MultiModeStart_DMA(&hadc1,(uint32_t *)adc_buffer,sizeof(adc_buffer));
 		//  HAL_ADC_Start_DMA(&hadc2,(uint32_t *)&adc_buffer[4096],8192);
 		  rxdata='\0';
@@ -146,10 +166,10 @@ int main(void)
 		  //HAL_ADC_Stop_DMA(&hadc2);
 		  CDC_Transmit_FS(adc_buffer,sizeof(adc_buffer));
 		 // CDC_Transmit_FS(adc_buffer_2,sizeof(adc_buffer_2));
-
+*/
 	  }
 
-	  HAL_Delay(1);
+	//  HAL_Delay(1);
 
 
     /* USER CODE END WHILE */
@@ -181,7 +201,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 168;
+  RCC_OscInitStruct.PLL.PLLN = 200;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -195,8 +215,8 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV16;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
@@ -226,7 +246,7 @@ static void MX_ADC1_Init(void)
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = DISABLE;
   hadc1.Init.ContinuousConvMode = ENABLE;
@@ -235,7 +255,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = 1;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
@@ -245,7 +265,7 @@ static void MX_ADC1_Init(void)
   /** Configure the ADC multi-mode
   */
   multimode.Mode = ADC_DUALMODE_REGSIMULT;
-  multimode.DMAAccessMode = ADC_DMAACCESSMODE_1;
+  multimode.DMAAccessMode = ADC_DMAACCESSMODE_2;
   multimode.TwoSamplingDelay = ADC_TWOSAMPLINGDELAY_5CYCLES;
   if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
   {
@@ -254,9 +274,9 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_VREFINT;
+  sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = 1.5;//ADC_SAMPLETIME_3CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -288,7 +308,7 @@ static void MX_ADC2_Init(void)
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc2.Instance = ADC2;
-  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   hadc2.Init.Resolution = ADC_RESOLUTION_12B;
   hadc2.Init.ScanConvMode = DISABLE;
   hadc2.Init.ContinuousConvMode = ENABLE;
@@ -297,7 +317,6 @@ static void MX_ADC2_Init(void)
   hadc2.Init.NbrOfConversion = 1;
   hadc2.Init.DMAContinuousRequests = DISABLE;
   hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-
   if (HAL_ADC_Init(&hadc2) != HAL_OK)
   {
     Error_Handler();
@@ -305,9 +324,9 @@ static void MX_ADC2_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Channel = ADC_CHANNEL_2;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = 1.5;//ADC_SAMPLETIME_3CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -358,6 +377,39 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief UART5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_UART5_Init(void)
+{
+
+  /* USER CODE BEGIN UART5_Init 0 */
+
+  /* USER CODE END UART5_Init 0 */
+
+  /* USER CODE BEGIN UART5_Init 1 */
+
+  /* USER CODE END UART5_Init 1 */
+  huart5.Instance = UART5;
+  huart5.Init.BaudRate = 115200;
+  huart5.Init.WordLength = UART_WORDLENGTH_8B;
+  huart5.Init.StopBits = UART_STOPBITS_1;
+  huart5.Init.Parity = UART_PARITY_NONE;
+  huart5.Init.Mode = UART_MODE_TX_RX;
+  huart5.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart5.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART5_Init 2 */
+
+  /* USER CODE END UART5_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -397,7 +449,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
